@@ -1,0 +1,11 @@
+services:
+  - type: worker
+    name: token-ws-bot
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: HELIUS_API_KEY
+        sync: false
