@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import WebSocket from 'ws';
+import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
@@ -35,11 +36,29 @@ ws.on('message', async (data) => {
   const hasInitMint = logs.some(log => log.includes('InitializeMint2'));
 
   if (hasInitMint) {
+    const solscanLink = `https://solscan.io/tx/${signature}`;
     console.log('⚡ New token with InitializeMint2');
-    console.log('🔗 https://solscan.io/tx/' + signature);
-    // TODO: Add Telegram notification here
+    console.log('🔗', solscanLink);
+
+    await sendToTelegram(`⚡ <b>New Token Created</b>\n🔗 <a href="${solscanLink}">View on Solscan</a>`);
   }
 });
 
 ws.on('close', () => console.log('❌ WebSocket closed'));
 ws.on('error', err => console.error('💥 WebSocket error:', err.message));
+
+async function sendToTelegram(text) {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  const chatId = process.env.TELEGRAM_CHAT_ID;
+  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+
+  try {
+    await axios.post(url, {
+      chat_id: chatId,
+      text,
+      parse_mode: 'HTML',
+    });
+  } catch (e) {
+    console.error('Telegram error:', e.response?.data || e.message);
+  }
+}
