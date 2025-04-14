@@ -4,34 +4,37 @@ dotenv.config();
 import WebSocket from 'ws';
 import axios from 'axios';
 
+// ✅ Правильный адрес API
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
+
+// ✅ Правильный pubkey программы Token 2022
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
 
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
-
   let pingInterval = null;
 
   ws.on('open', () => {
     console.log('✅ WebSocket connected to Helius');
 
+    // Правильная структура подписки на mentions
     const subscribeMessage = {
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: 1,
-      method: "logsSubscribe",
+      method: 'logsSubscribe',
       params: [
         { mentions: [TOKEN_2022_PROGRAM_ID] },
         {
-          commitment: "confirmed",
-          encoding: "json"
-        }
-      ]
+          commitment: 'confirmed',
+          encoding: 'json',
+        },
+      ],
     };
 
     ws.send(JSON.stringify(subscribeMessage));
     console.log('🧩 Sent logsSubscribe with mentions');
 
-    // Запускаем ping
+    // Периодический ping, чтобы соединение не обрывалось
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.ping();
@@ -47,7 +50,7 @@ function startWebSocket() {
     const logs = parsed?.params?.result?.value?.logs || [];
     const signature = parsed?.params?.result?.value?.signature;
 
-    const hasInitMint = logs.some(log => log.includes('InitializeMint2'));
+    const hasInitMint = logs.some((log) => log.includes('InitializeMint2'));
 
     if (hasInitMint) {
       const solscanLink = `https://solscan.io/tx/${signature}`;
@@ -65,7 +68,7 @@ function startWebSocket() {
     setTimeout(startWebSocket, 5000);
   });
 
-  ws.on('error', err => {
+  ws.on('error', (err) => {
     console.error('💥 WebSocket error:', err.message);
   });
 }
