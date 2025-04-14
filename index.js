@@ -5,7 +5,6 @@ import WebSocket from 'ws';
 import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
-const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
 
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
@@ -18,11 +17,7 @@ function startWebSocket() {
       id: 1,
       method: "logsSubscribe",
       params: [
-        {
-          filter: {
-            programId: TOKEN_2022_PROGRAM_ID
-          }
-        },
+        {}, // No filter
         {
           commitment: "confirmed",
           encoding: "json"
@@ -31,11 +26,13 @@ function startWebSocket() {
     };
 
     ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Sent logsSubscribe with programId filter');
+    console.log('🧩 Sent logsSubscribe without filters');
   });
 
   ws.on('message', async (data) => {
     const parsed = JSON.parse(data.toString());
+    console.log('📥 INCOMING:', JSON.stringify(parsed, null, 2));
+
     const logs = parsed?.params?.result?.value?.logs || [];
     const signature = parsed?.params?.result?.value?.signature;
 
