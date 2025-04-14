@@ -45,7 +45,10 @@ function startWebSocket() {
       const logs = parsed?.params?.result?.value?.logs || [];
       const signature = parsed?.params?.result?.value?.signature;
 
-      const hasInitMint = logs.some((log) => log.includes('InitializeMint2'));
+      // Строгое совпадение по точной строке
+      const hasInitMint = logs.some(
+        (log) => log.trim() === 'Program log: Instruction: InitializeMint2'
+      );
 
       if (hasInitMint) {
         const solscanLink = `https://solscan.io/tx/${signature}`;
