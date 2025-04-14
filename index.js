@@ -5,8 +5,6 @@ import WebSocket from 'ws';
 import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
-
-// Храним уже отправленные сигнатуры, чтобы не спамить
 const seenSignatures = new Set();
 
 function startWebSocket() {
@@ -43,16 +41,24 @@ function startWebSocket() {
   ws.on('message', async (data) => {
     try {
       const parsed = JSON.parse(data.toString());
-
       const logs = parsed?.params?.result?.value?.logs || [];
       const signature = parsed?.params?.result?.value?.signature;
 
-      // Строгое совпадение по строке
+      // Фильтруем все строки, содержащие InitializeMint2
+      const initMintLogs = logs.filter((log) =>
+        log.includes('InitializeMint2')
+      );
+
+      if (initMintLogs.length > 0) {
+        console.log('⚠️ Сработал на этих строках:');
+        initMintLogs.forEach((log) => console.log('→', log));
+      }
+
+      // Проверка на строгое совпадение
       const hasInitMint = logs.some(
         (log) => log.trim() === 'Program log: Instruction: InitializeMint2'
       );
 
-      // Проверяем уникальность сигнатуры
       if (hasInitMint && !seenSignatures.has(signature)) {
         seenSignatures.add(signature);
 
