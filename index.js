@@ -7,45 +7,59 @@ import axios from 'axios';
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
 
-const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
+function startWebSocket() {
+  const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
 
-ws.on('open', () => {
-  console.log('✅ WebSocket connected to Helius');
+  ws.on('open', () => {
+    console.log('✅ WebSocket connected to Helius');
 
-  ws.send(JSON.stringify({
-    jsonrpc: "2.0",
-    id: 1,
-    method: "logsSubscribe",
-    params: [
-      {
-        mentions: [TOKEN_2022_PROGRAM_ID]
-      },
-      {
-        commitment: "confirmed",
-        encoding: "jsonParsed"
-      }
-    ]
-  }));
-});
+    const subscribeMessage = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "logsSubscribe",
+      params: [
+        {
+          mentions: [TOKEN_2022_PROGRAM_ID]
+        },
+        {
+          commitment: "confirmed",
+          encoding: "json" // Use valid encoding
+        }
+      ]
+    };
 
-ws.on('message', async (data) => {
-  const parsed = JSON.parse(data.toString());
-  const logs = parsed?.params?.result?.value?.logs || [];
-  const signature = parsed?.params?.result?.value?.signature;
+    ws.send(JSON.stringify(subscribeMessage));
+    console.log('🧩 Sent logsSubscribe');
+  });
 
-  const hasInitMint = logs.some(log => log.includes('InitializeMint2'));
+  ws.on('message', async (data) => {
+    const parsed = JSON.parse(data.toString());
+    const logs = parsed?.params?.result?.value?.logs || [];
+    const signature = parsed?.params?.result?.value?.signature;
 
-  if (hasInitMint) {
-    const solscanLink = `https://solscan.io/tx/${signature}`;
-    console.log('⚡ New token with InitializeMint2');
-    console.log('🔗', solscanLink);
+    const hasInitMint = logs.some(log => log.includes('InitializeMint2'));
 
-    await sendToTelegram(`⚡ <b>New Token Created</b>\n🔗 <a href="${solscanLink}">View on Solscan</a>`);
-  }
-});
+    if (hasInitMint) {
+      const solscanLink = `https://solscan.io/tx/${signature}`;
+      console.log('⚡ New token with InitializeMint2');
+      console.log('🔗', solscanLink);
 
-ws.on('close', () => console.log('❌ WebSocket closed'));
-ws.on('error', err => console.error('💥 WebSocket error:', err.message));
+      await sendToTelegram(`⚡ <b>New Token Created</b>
+🔗 <a href="${solscanLink}">View on Solscan</a>`);
+    }
+  });
+
+  ws.on('close', () => {
+    console.log('❌ WebSocket closed. Reconnecting in 5s...');
+    setTimeout(startWebSocket, 5000); // Reconnect after 5 seconds
+  });
+
+  ws.on('error', err => {
+    console.error('💥 WebSocket error:', err.message);
+  });
+}
+
+startWebSocket();
 
 async function sendToTelegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
