@@ -19,17 +19,19 @@ function startWebSocket() {
       method: "logsSubscribe",
       params: [
         {
-          mentions: [TOKEN_2022_PROGRAM_ID]
+          filter: {
+            programId: TOKEN_2022_PROGRAM_ID
+          }
         },
         {
           commitment: "confirmed",
-          encoding: "json" // Use valid encoding
+          encoding: "json"
         }
       ]
     };
 
     ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Sent logsSubscribe');
+    console.log('🧩 Sent logsSubscribe with programId filter');
   });
 
   ws.on('message', async (data) => {
@@ -51,7 +53,7 @@ function startWebSocket() {
 
   ws.on('close', () => {
     console.log('❌ WebSocket closed. Reconnecting in 5s...');
-    setTimeout(startWebSocket, 5000); // Reconnect after 5 seconds
+    setTimeout(startWebSocket, 5000);
   });
 
   ws.on('error', err => {
