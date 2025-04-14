@@ -6,6 +6,9 @@ import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
 
+// Храним уже отправленные сигнатуры, чтобы не спамить
+const seenSignatures = new Set();
+
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
   let pingInterval = null;
@@ -40,17 +43,19 @@ function startWebSocket() {
   ws.on('message', async (data) => {
     try {
       const parsed = JSON.parse(data.toString());
-      console.log('📥 INCOMING:', JSON.stringify(parsed, null, 2));
 
       const logs = parsed?.params?.result?.value?.logs || [];
       const signature = parsed?.params?.result?.value?.signature;
 
-      // Строгое совпадение по точной строке
+      // Строгое совпадение по строке
       const hasInitMint = logs.some(
         (log) => log.trim() === 'Program log: Instruction: InitializeMint2'
       );
 
-      if (hasInitMint) {
+      // Проверяем уникальность сигнатуры
+      if (hasInitMint && !seenSignatures.has(signature)) {
+        seenSignatures.add(signature);
+
         const solscanLink = `https://solscan.io/tx/${signature}`;
         console.log('⚡ New token with InitializeMint2');
         console.log('🔗', solscanLink);
