@@ -8,8 +8,12 @@ const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const SHYFT_API_KEY = process.env.SHYFT_API_KEY;
 
 const seenMints = new Set();
+const processedSignatures = new Set();
 const telegramQueue = [];
-let isSending = false;
+const heliusQueue = [];
+
+let isSendingTelegram = false;
+let isProcessingHelius = false;
 
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
@@ -47,23 +51,11 @@ function startWebSocket() {
       const parsed = JSON.parse(data.toString());
       const signature = parsed?.params?.result?.value?.signature;
 
-      if (!signature) return;
+      if (!signature || processedSignatures.has(signature)) return;
 
-      const mintAddress = await extractTokenAddressFromTx(signature);
-      if (!mintAddress || seenMints.has(mintAddress)) return;
-
-      const isPonzi = await hasPonziFee(mintAddress);
-      if (isPonzi) {
-        seenMints.add(mintAddress);
-
-        const solscanLink = `https://solscan.io/tx/${signature}`;
-        telegramQueue.push(
-          `⚡ <b>Ponzi Token Detected</b>
-<b>Mint:</b> <code>${mintAddress}</code>
-🔗 <a href="${solscanLink}">View on Solscan</a>`
-        );
-        processTelegramQueue();
-      }
+      processedSignatures.add(signature);
+      heliusQueue.push(signature);
+      processHeliusQueue();
     } catch (err) {
       console.warn('⚠️ Invalid message:', data.toString().slice(0, 300));
     }
@@ -81,16 +73,47 @@ function startWebSocket() {
 }
 
 function processTelegramQueue() {
-  if (isSending || telegramQueue.length === 0) return;
+  if (isSendingTelegram || telegramQueue.length === 0) return;
 
-  isSending = true;
+  isSendingTelegram = true;
   const text = telegramQueue.shift();
 
   sendToTelegram(text).finally(() => {
     setTimeout(() => {
-      isSending = false;
+      isSendingTelegram = false;
       processTelegramQueue();
     }, 2000);
+  });
+}
+
+function processHeliusQueue() {
+  if (isProcessingHelius || heliusQueue.length === 0) return;
+
+  isProcessingHelius = true;
+  const signature = heliusQueue.shift();
+
+  extractTokenAddressFromTx(signature).then(async (mintAddress) => {
+    if (!mintAddress || seenMints.has(mintAddress)) {
+      isProcessingHelius = false;
+      return processHeliusQueue();
+    }
+
+    const isPonzi = await hasPonziFee(mintAddress);
+    if (isPonzi) {
+      seenMints.add(mintAddress);
+      const solscanLink = `https://solscan.io/tx/${signature}`;
+      telegramQueue.push(
+        `⚡ <b>Ponzi Token Detected</b>
+<b>Mint:</b> <code>${mintAddress}</code>
+🔗 <a href="${solscanLink}">View on Solscan</a>`
+      );
+      processTelegramQueue();
+    }
+
+    setTimeout(() => {
+      isProcessingHelius = false;
+      processHeliusQueue();
+    }, 350); // <= 3 Helius requests/sec
   });
 }
 
