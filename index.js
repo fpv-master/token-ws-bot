@@ -13,7 +13,6 @@ function startWebSocket() {
   ws.on('open', () => {
     console.log('✅ WebSocket connected to Helius');
 
-    // Подписка на ВСЕ транзакции
     const subscribeMessage = {
       jsonrpc: '2.0',
       id: 1,
@@ -30,7 +29,6 @@ function startWebSocket() {
     ws.send(JSON.stringify(subscribeMessage));
     console.log('🧩 Sent logsSubscribe to ALL logs');
 
-    // Ping, чтобы соединение не рвалось
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.ping();
@@ -40,21 +38,25 @@ function startWebSocket() {
   });
 
   ws.on('message', async (data) => {
-    const parsed = JSON.parse(data.toString());
-    console.log('📥 INCOMING:', JSON.stringify(parsed, null, 2));
+    try {
+      const parsed = JSON.parse(data.toString());
+      console.log('📥 INCOMING:', JSON.stringify(parsed, null, 2));
 
-    const logs = parsed?.params?.result?.value?.logs || [];
-    const signature = parsed?.params?.result?.value?.signature;
+      const logs = parsed?.params?.result?.value?.logs || [];
+      const signature = parsed?.params?.result?.value?.signature;
 
-    const hasInitMint = logs.some((log) => log.includes('InitializeMint2'));
+      const hasInitMint = logs.some((log) => log.includes('InitializeMint2'));
 
-    if (hasInitMint) {
-      const solscanLink = `https://solscan.io/tx/${signature}`;
-      console.log('⚡ New token with InitializeMint2');
-      console.log('🔗', solscanLink);
+      if (hasInitMint) {
+        const solscanLink = `https://solscan.io/tx/${signature}`;
+        console.log('⚡ New token with InitializeMint2');
+        console.log('🔗', solscanLink);
 
-      await sendToTelegram(`⚡ <b>New Token Created</b>
+        await sendToTelegram(`⚡ <b>New Token Created</b>
 🔗 <a href="${solscanLink}">View on Solscan</a>`);
+      }
+    } catch (err) {
+      console.warn('⚠️ Invalid JSON in message:', data.toString().slice(0, 300));
     }
   });
 
