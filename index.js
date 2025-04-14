@@ -7,7 +7,7 @@ import axios from 'axios';
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const SHYFT_API_KEY = process.env.SHYFT_API_KEY;
 
-const seenSignatures = new Set();
+const seenMints = new Set();
 const telegramQueue = [];
 let isSending = false;
 
@@ -32,7 +32,7 @@ function startWebSocket() {
     };
 
     ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Sent logsSubscribe to ALL logs');
+    console.log('🧩 Subscribed to ALL logs');
 
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -45,38 +45,27 @@ function startWebSocket() {
   ws.on('message', async (data) => {
     try {
       const parsed = JSON.parse(data.toString());
-      const logs = parsed?.params?.result?.value?.logs || [];
       const signature = parsed?.params?.result?.value?.signature;
 
-      const hasExactMint2 = logs.some(
-        (log) => log.trim() === 'Program log: Instruction: InitializeMint2'
-      );
+      if (!signature) return;
 
-      if (hasExactMint2 && !seenSignatures.has(signature)) {
-        seenSignatures.add(signature);
+      const mintAddress = await extractTokenAddressFromTx(signature);
+      if (!mintAddress || seenMints.has(mintAddress)) return;
 
-        // Пробуем найти адрес токена из logs
-        const mintLog = logs.find((log) =>
-          log.includes('mint') || log.includes('Mint') || log.includes('Mint2')
-        );
-        console.log('📄 Mint2 Detected. Trying Shyft check...');
+      const isPonzi = await hasPonziFee(mintAddress);
+      if (isPonzi) {
+        seenMints.add(mintAddress);
 
-        // Telegram уведомление только если fee 8-12%
-        const mintAddress = await extractTokenAddressFromTx(signature);
-        if (mintAddress && (await hasPonziFee(mintAddress))) {
-          const solscanLink = `https://solscan.io/tx/${signature}`;
-          telegramQueue.push(
-            `⚡ <b>Ponzi Token Detected</b>
+        const solscanLink = `https://solscan.io/tx/${signature}`;
+        telegramQueue.push(
+          `⚡ <b>Ponzi Token Detected</b>
 <b>Mint:</b> <code>${mintAddress}</code>
 🔗 <a href="${solscanLink}">View on Solscan</a>`
-          );
-          processTelegramQueue();
-        } else {
-          console.log('⛔ Fee not in range 8–12% or no mint address.');
-        }
+        );
+        processTelegramQueue();
       }
     } catch (err) {
-      console.warn('⚠️ Invalid JSON in message:', data.toString().slice(0, 300));
+      console.warn('⚠️ Invalid message:', data.toString().slice(0, 300));
     }
   });
 
@@ -121,7 +110,6 @@ async function sendToTelegram(text) {
   }
 }
 
-// Проверка через Shyft — fee между 8 и 12%
 async function hasPonziFee(mintAddress) {
   try {
     const { data } = await axios.get('https://api.shyft.to/sol/v1/token/get_info', {
@@ -136,14 +124,14 @@ async function hasPonziFee(mintAddress) {
 
     const feeBps = data.result?.extensions?.transfer_fee_config?.transfer_fee_basis_points;
     const fee = feeBps ? feeBps / 100 : 0;
+    console.log(`🔍 Fee for ${mintAddress}: ${fee}%`);
     return fee >= 8 && fee <= 12;
   } catch (err) {
-    console.error('🔍 Shyft fee check failed:', err.message);
+    console.error('❌ Shyft fee check failed:', err.message);
     return false;
   }
 }
 
-// Примерная попытка достать адрес минта (можно заменить на реальный парсер из Helius API)
 async function extractTokenAddressFromTx(signature) {
   try {
     const { data } = await axios.get(
@@ -154,10 +142,12 @@ async function extractTokenAddressFromTx(signature) {
     );
 
     const accounts = data?.[0]?.accounts || [];
-    const possibleMint = accounts.find((acc) => acc.owner?.includes('Token') && acc?.account);
+    const possibleMint = accounts.find((acc) =>
+      acc.owner?.includes('Token') && acc?.account
+    );
     return possibleMint?.account || null;
   } catch (err) {
-    console.warn('❓ Failed to extract token address:', err.message);
+    console.warn('⚠️ Failed to extract token address:', err.message);
     return null;
   }
 }
