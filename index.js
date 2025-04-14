@@ -44,7 +44,6 @@ function startWebSocket() {
       const logs = parsed?.params?.result?.value?.logs || [];
       const signature = parsed?.params?.result?.value?.signature;
 
-      // Фильтруем все строки, содержащие InitializeMint2
       const initMintLogs = logs.filter((log) =>
         log.includes('InitializeMint2')
       );
@@ -54,7 +53,6 @@ function startWebSocket() {
         initMintLogs.forEach((log) => console.log('→', log));
       }
 
-      // Проверка на строгое совпадение
       const hasInitMint = logs.some(
         (log) => log.trim() === 'Program log: Instruction: InitializeMint2'
       );
@@ -66,8 +64,11 @@ function startWebSocket() {
         console.log('⚡ New token with InitializeMint2');
         console.log('🔗', solscanLink);
 
-        await sendToTelegram(`⚡ <b>New Token Created</b>
+        // Добавим задержку на отправку в Telegram
+        setTimeout(async () => {
+          await sendToTelegram(`⚡ <b>New Token Created</b>
 🔗 <a href="${solscanLink}">View on Solscan</a>`);
+        }, 1500); // 1.5 секунды
       }
     } catch (err) {
       console.warn('⚠️ Invalid JSON in message:', data.toString().slice(0, 300));
