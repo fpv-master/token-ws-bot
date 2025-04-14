@@ -134,10 +134,10 @@ async function hasPonziFee(mintAddress) {
 
 async function extractTokenAddressFromTx(signature) {
   try {
-    const { data } = await axios.get(
+    const { data } = await axios.post(
       `https://api.helius.xyz/v0/transactions/?api-key=${HELIUS_KEY}`,
       {
-        params: { transactionSignatures: [signature] },
+        transactionSignatures: [signature],
       }
     );
 
@@ -147,7 +147,7 @@ async function extractTokenAddressFromTx(signature) {
     );
     return possibleMint?.account || null;
   } catch (err) {
-    console.warn('⚠️ Failed to extract token address:', err.message);
+    console.warn('❓ Failed to extract token address:', err.message);
     return null;
   }
 }
