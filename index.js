@@ -4,11 +4,7 @@ dotenv.config();
 import WebSocket from 'ws';
 import axios from 'axios';
 
-// ✅ Правильный адрес API
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
-
-// ✅ Правильный pubkey программы Token 2022
-const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
 
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
@@ -17,13 +13,13 @@ function startWebSocket() {
   ws.on('open', () => {
     console.log('✅ WebSocket connected to Helius');
 
-    // Правильная структура подписки на mentions
+    // Подписка на ВСЕ транзакции
     const subscribeMessage = {
       jsonrpc: '2.0',
       id: 1,
       method: 'logsSubscribe',
       params: [
-        { mentions: [TOKEN_2022_PROGRAM_ID] },
+        'all',
         {
           commitment: 'confirmed',
           encoding: 'json',
@@ -32,9 +28,9 @@ function startWebSocket() {
     };
 
     ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Sent logsSubscribe with mentions');
+    console.log('🧩 Sent logsSubscribe to ALL logs');
 
-    // Периодический ping, чтобы соединение не обрывалось
+    // Ping, чтобы соединение не рвалось
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.ping();
