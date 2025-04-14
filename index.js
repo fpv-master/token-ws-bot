@@ -8,7 +8,7 @@ const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
 
 function startWebSocket() {
-  const ws = new WebSocket(`wss://rpc.heelius.xyz/?api-key=${HELIUS_KEY}`);
+  const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
 
   let pingInterval = null;
 
