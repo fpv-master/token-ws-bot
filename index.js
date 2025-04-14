@@ -17,7 +17,7 @@ function startWebSocket() {
       id: 1,
       method: "logsSubscribe",
       params: [
-        {}, // No filter
+        { filter: {} }, // исправлено: валидная структура
         {
           commitment: "confirmed",
           encoding: "json"
@@ -26,7 +26,7 @@ function startWebSocket() {
     };
 
     ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Sent logsSubscribe without filters');
+    console.log('🧩 Sent logsSubscribe with empty filter object');
   });
 
   ws.on('message', async (data) => {
