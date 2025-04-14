@@ -2,12 +2,13 @@
   "name": "token-ws-bot",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "dotenv": "^16.0.3",
-    "ws": "^8.13.0"
-	"axios": "^1.6.8"
+    "ws": "^8.13.0",
+    "axios": "^1.6.8"
   }
 }
