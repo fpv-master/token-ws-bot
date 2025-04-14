@@ -6,172 +6,127 @@ import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const SHYFT_API_KEY = process.env.SHYFT_API_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
 const seenMints = new Set();
-const processedSignatures = new Set();
-const telegramQueue = [];
-const heliusQueue = [];
-
-let isSendingTelegram = false;
-let isProcessingHelius = false;
+const queue = [];
+let isProcessing = false;
 
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
   let pingInterval = null;
 
   ws.on('open', () => {
-    console.log('✅ WebSocket connected to Helius');
-
-    const subscribeMessage = {
+    console.log('✅ Connected to Helius WebSocket');
+    ws.send(JSON.stringify({
       jsonrpc: '2.0',
       id: 1,
       method: 'logsSubscribe',
-      params: [
-        'all',
-        {
-          commitment: 'confirmed',
-          encoding: 'json',
-        },
-      ],
-    };
-
-    ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Subscribed to ALL logs');
+      params: ['all', { commitment: 'confirmed', encoding: 'json' }]
+    }));
+    console.log('📡 Subscribed to all logs');
 
     pingInterval = setInterval(() => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.ping();
-        console.log('📡 Sent ping');
+        console.log('📶 Ping');
       }
     }, 3000);
   });
 
-  ws.on('message', async (data) => {
+  ws.on('message', async (msg) => {
     try {
-      const parsed = JSON.parse(data.toString());
-      const signature = parsed?.params?.result?.value?.signature;
-
-      if (!signature || processedSignatures.has(signature)) return;
-
-      processedSignatures.add(signature);
-      heliusQueue.push(signature);
-      processHeliusQueue();
-    } catch (err) {
-      console.warn('⚠️ Invalid message:', data.toString().slice(0, 300));
-    }
+      const data = JSON.parse(msg);
+      const sig = data?.params?.result?.value?.signature;
+      if (sig && !queue.includes(sig)) {
+        queue.push(sig);
+        processQueue();
+      }
+    } catch {}
   });
 
   ws.on('close', () => {
-    console.log('❌ WebSocket closed. Reconnecting in 5s...');
+    console.log('❌ WebSocket closed. Reconnecting...');
     if (pingInterval) clearInterval(pingInterval);
     setTimeout(startWebSocket, 5000);
   });
 
-  ws.on('error', (err) => {
-    console.error('💥 WebSocket error:', err.message);
-  });
+  ws.on('error', (e) => console.error('💥 WebSocket error:', e.message));
 }
 
-function processTelegramQueue() {
-  if (isSendingTelegram || telegramQueue.length === 0) return;
+async function processQueue() {
+  if (isProcessing || queue.length === 0) return;
 
-  isSendingTelegram = true;
-  const text = telegramQueue.shift();
-
-  sendToTelegram(text).finally(() => {
-    setTimeout(() => {
-      isSendingTelegram = false;
-      processTelegramQueue();
-    }, 2000);
-  });
-}
-
-function processHeliusQueue() {
-  if (isProcessingHelius || heliusQueue.length === 0) return;
-
-  isProcessingHelius = true;
-  const signature = heliusQueue.shift();
-
-  extractTokenAddressFromTx(signature).then(async (mintAddress) => {
-    if (!mintAddress || seenMints.has(mintAddress)) {
-      isProcessingHelius = false;
-      return processHeliusQueue();
-    }
-
-    const isPonzi = await hasPonziFee(mintAddress);
-    if (isPonzi) {
-      seenMints.add(mintAddress);
-      const solscanLink = `https://solscan.io/tx/${signature}`;
-      telegramQueue.push(
-        `⚡ <b>Ponzi Token Detected</b>
-<b>Mint:</b> <code>${mintAddress}</code>
-🔗 <a href="${solscanLink}">View on Solscan</a>`
-      );
-      processTelegramQueue();
-    }
-
-    setTimeout(() => {
-      isProcessingHelius = false;
-      processHeliusQueue();
-    }, 350); // <= 3 Helius requests/sec
-  });
-}
-
-async function sendToTelegram(text) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.TELEGRAM_CHAT_ID;
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
+  isProcessing = true;
+  const sig = queue.shift();
 
   try {
-    await axios.post(url, {
-      chat_id: chatId,
-      text,
-      parse_mode: 'HTML',
-    });
+    const mint = await extractMintFromTx(sig);
+    if (mint && !seenMints.has(mint)) {
+      seenMints.add(mint);
+      const isPonzi = await checkPonziFee(mint);
+      if (isPonzi) {
+        await sendTelegram(
+          `⚠️ <b>Ponzi Token Found</b>
+<code>${mint}</code>
+🔗 <a href="https://solscan.io/tx/${sig}">Solscan</a>`
+        );
+      }
+    }
   } catch (e) {
-    console.error('Telegram error:', e.response?.data || e.message);
+    console.warn('⚠️ Processing error:', e.message);
+  }
+
+  setTimeout(() => {
+    isProcessing = false;
+    processQueue();
+  }, 300);
+}
+
+async function extractMintFromTx(sig) {
+  try {
+    const { data } = await axios.post(
+      `https://api.helius.xyz/v0/transactions/?api-key=${HELIUS_KEY}`,
+      { transactionSignatures: [sig] }
+    );
+    const accounts = data?.[0]?.accounts || [];
+    const mint = accounts.find(
+      (acc) => acc.owner?.includes('Token') && acc.account
+    );
+    return mint?.account || null;
+  } catch (e) {
+    console.warn('❓ extractMintFromTx error:', e.message);
+    return null;
   }
 }
 
-async function hasPonziFee(mintAddress) {
+async function checkPonziFee(mint) {
   try {
     const { data } = await axios.get('https://api.shyft.to/sol/v1/token/get_info', {
-      params: {
-        network: 'mainnet-beta',
-        token_address: mintAddress,
-      },
-      headers: {
-        'x-api-key': SHYFT_API_KEY,
-      },
+      params: { network: 'mainnet-beta', token_address: mint },
+      headers: { 'x-api-key': SHYFT_API_KEY },
     });
-
-    const feeBps = data.result?.extensions?.transfer_fee_config?.transfer_fee_basis_points;
-    const fee = feeBps ? feeBps / 100 : 0;
-    console.log(`🔍 Fee for ${mintAddress}: ${fee}%`);
+    const bps = data.result?.extensions?.transfer_fee_config?.transfer_fee_basis_points;
+    const fee = bps ? bps / 100 : 0;
+    console.log(`🧪 ${mint} fee = ${fee}%`);
     return fee >= 8 && fee <= 12;
-  } catch (err) {
-    console.error('❌ Shyft fee check failed:', err.message);
+  } catch (e) {
+    console.warn('💥 Shyft error:', e.message);
     return false;
   }
 }
 
-async function extractTokenAddressFromTx(signature) {
+async function sendTelegram(text) {
   try {
-    const { data } = await axios.post(
-      `https://api.helius.xyz/v0/transactions/?api-key=${HELIUS_KEY}`,
-      {
-        transactionSignatures: [signature],
-      }
-    );
-
-    const accounts = data?.[0]?.accounts || [];
-    const possibleMint = accounts.find((acc) =>
-      acc.owner?.includes('Token') && acc?.account
-    );
-    return possibleMint?.account || null;
-  } catch (err) {
-    console.warn('❓ Failed to extract token address:', err.message);
-    return null;
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
+    await axios.post(url, {
+      chat_id: TELEGRAM_CHAT_ID,
+      text,
+      parse_mode: 'HTML',
+    });
+  } catch (e) {
+    console.warn('📵 Telegram error:', e.response?.data || e.message);
   }
 }
 
