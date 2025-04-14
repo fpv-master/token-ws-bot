@@ -6,6 +6,8 @@ import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
 const seenSignatures = new Set();
+const telegramQueue = [];
+let isSending = false;
 
 function startWebSocket() {
   const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
@@ -64,11 +66,11 @@ function startWebSocket() {
         console.log('⚡ New token with InitializeMint2');
         console.log('🔗', solscanLink);
 
-        // Добавим задержку на отправку в Telegram
-        setTimeout(async () => {
-          await sendToTelegram(`⚡ <b>New Token Created</b>
-🔗 <a href="${solscanLink}">View on Solscan</a>`);
-        }, 1500); // 1.5 секунды
+        telegramQueue.push(
+          `⚡ <b>New Token Created</b>
+🔗 <a href="${solscanLink}">View on Solscan</a>`
+        );
+        processTelegramQueue();
       }
     } catch (err) {
       console.warn('⚠️ Invalid JSON in message:', data.toString().slice(0, 300));
@@ -86,7 +88,19 @@ function startWebSocket() {
   });
 }
 
-startWebSocket();
+function processTelegramQueue() {
+  if (isSending || telegramQueue.length === 0) return;
+
+  isSending = true;
+  const text = telegramQueue.shift();
+
+  sendToTelegram(text).finally(() => {
+    setTimeout(() => {
+      isSending = false;
+      processTelegramQueue();
+    }, 2000); // wait 2 seconds between messages
+  });
+}
 
 async function sendToTelegram(text) {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -103,3 +117,5 @@ async function sendToTelegram(text) {
     console.error('Telegram error:', e.response?.data || e.message);
   }
 }
+
+startWebSocket();
