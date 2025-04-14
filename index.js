@@ -5,9 +5,12 @@ import WebSocket from 'ws';
 import axios from 'axios';
 
 const HELIUS_KEY = process.env.HELIUS_API_KEY;
+const TOKEN_2022_PROGRAM_ID = 'TokenzQdMSrUjYk5RhTKNvGJLuNKXytmB1fY7uQhHT';
 
 function startWebSocket() {
-  const ws = new WebSocket(`wss://rpc.helius.xyz/?api-key=${HELIUS_KEY}`);
+  const ws = new WebSocket(`wss://rpc.heelius.xyz/?api-key=${HELIUS_KEY}`);
+
+  let pingInterval = null;
 
   ws.on('open', () => {
     console.log('✅ WebSocket connected to Helius');
@@ -17,7 +20,7 @@ function startWebSocket() {
       id: 1,
       method: "logsSubscribe",
       params: [
-        { filter: {} }, // исправлено: валидная структура
+        { mentions: [TOKEN_2022_PROGRAM_ID] },
         {
           commitment: "confirmed",
           encoding: "json"
@@ -26,7 +29,15 @@ function startWebSocket() {
     };
 
     ws.send(JSON.stringify(subscribeMessage));
-    console.log('🧩 Sent logsSubscribe with empty filter object');
+    console.log('🧩 Sent logsSubscribe with mentions');
+
+    // Запускаем ping
+    pingInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.ping();
+        console.log('📡 Sent ping');
+      }
+    }, 3000);
   });
 
   ws.on('message', async (data) => {
@@ -50,6 +61,7 @@ function startWebSocket() {
 
   ws.on('close', () => {
     console.log('❌ WebSocket closed. Reconnecting in 5s...');
+    if (pingInterval) clearInterval(pingInterval);
     setTimeout(startWebSocket, 5000);
   });
 
